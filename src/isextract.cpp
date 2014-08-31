@@ -2,15 +2,22 @@
 
 #include <iostream>
 
-#ifdef _WIN32
-#define DIR_SEPARATOR '\\'
-#else
-#define DIR_SEPARATOR '/'
-#endif
-
 const uint32_t signature = 0x8C655D13;
 const int32_t data_start = 255;
-const uint32_t chunk = 16384;
+const uint32_t CHUNK = 16384;
+
+unsigned inf(void *how, unsigned char **buf)
+{
+    static unsigned char hold[CHUNK];
+
+    *buf = hold;
+    return fread(hold, 1, CHUNK, (FILE *)how);
+}
+
+int outf(void *how, unsigned char *buf, unsigned len)
+{
+    return fwrite(buf, 1, len, (FILE *)how) != len;
+}
 
 InstallShield::~InstallShield()
 {
@@ -19,8 +26,7 @@ InstallShield::~InstallShield()
 
 InstallShield::InstallShield():
 m_dataoffset(data_start),
-m_datasize(0),
-m_decomp()
+m_datasize(0)
 {
     
 }
@@ -65,12 +71,13 @@ void InstallShield::open(std::string& filename)
             parseFiles();
         }
     }
+    
+    m_fh.close();
 }
 
 void InstallShield::close()
 {
     m_filename = "";
-    m_fh.close();
 }
 
 uint32_t InstallShield::parseDirs()
@@ -129,7 +136,8 @@ void InstallShield::parseFiles()
 bool InstallShield::extractFile(const std::string& filename, const std::string& dir)
 {
     t_file_entry file;
-    std::fstream ofh;
+    FILE* ifh;
+    FILE* ofh;
     
     m_current_file = m_files.find(filename);
     
@@ -139,20 +147,26 @@ bool InstallShield::extractFile(const std::string& filename, const std::string& 
         return false;
     }
     
+    ifh = fopen(m_filename.c_str(), "rb");
+    ofh = fopen((dir + DIR_SEPARATOR + filename).c_str(), "wb");
+    
+    if(!ifh || !ofh) return false;
+    
     //seek to the file position we want to extract
-    m_fh.seekg(m_current_file->second.offset + m_dataoffset, std::ios_base::beg);
+    //m_fh.seekg(m_current_file->second.offset + m_dataoffset, std::ios_base::beg);
+    
+    fseek(ifh, m_current_file->second.offset + m_dataoffset, SEEK_SET);
     
     //open an output file stream
-    ofh.open((dir + DIR_SEPARATOR + filename).c_str(), std::fstream::out|std::fstream::binary);
+    //ofh.open((dir + DIR_SEPARATOR + filename).c_str(), std::fstream::out|std::fstream::binary);
     
-    if(m_current_file->second.compressed_size > chunk) {
-        m_file_remaining = m_current_file->second.compressed_size;
-    }
     //todo Blast decompress
     
-    blast(inf, &m_fh, outf, &ofh, m_file_remaining);
+    blast(inf, ifh, outf, ofh);
     
-    ofh.close();
+    fclose(ifh);
+    fclose(ofh);
+    
     return true;
 }
 

@@ -24,7 +24,12 @@
  * 1.1  16 Feb 2003     - Fixed distance check for > 4 GB uncompressed data
  */
 
+#include <setjmp.h>             /* for setjmp(), longjmp(), and jmp_buf */
 #include "blast.h"              /* prototype for blast() */
+
+#define local static            /* for local function definitions */
+#define MAXBITS 13              /* maximum code length */
+#define MAXWIN 4096             /* maximum window size */
 
 /* input and output state */
 struct state {
@@ -33,7 +38,6 @@ struct state {
     void *inhow;                /* opaque information passed to infun() */
     unsigned char *in;          /* next input location */
     unsigned left;              /* available input at in */
-    int total;                  /* how much to read */
     int bitbuf;                 /* bit buffer */
     int bitcnt;                 /* number of bits in bit buffer */
 
@@ -59,32 +63,41 @@ struct state {
  *   buffer, using shift right, and new bytes are appended to the top of the
  *   bit buffer, using shift left.
  */
-int Blast::bits(int need)
+local int bits(struct state *s, int need)
 {
     int val;            /* bit accumulator */
 
     /* load at least need bits into val */
-    val = m_bitbuf;
-    while (m_bitcnt < need) {
-        if (m_left == 0) {
-            m_left = m_infun(m_inhow, &(m_in), m_total);
-            if (m_left == 0) longjmp(m_env, 1);       /* out of input */
+    val = s->bitbuf;
+    while (s->bitcnt < need) {
+        if (s->left == 0) {
+            s->left = s->infun(s->inhow, &(s->in));
+            if (s->left == 0) longjmp(s->env, 1);       /* out of input */
         }
-        val |= (int)(*(m_in)++) << m_bitcnt;          /* load eight bits */
-        m_left--;
-        m_bitcnt += 8;
+        val |= (int)(*(s->in)++) << s->bitcnt;          /* load eight bits */
+        s->left--;
+        s->bitcnt += 8;
     }
 
     /* drop need bits and update buffer, always zero to seven bits left */
-    m_bitbuf = val >> need;
-    m_bitcnt -= need;
+    s->bitbuf = val >> need;
+    s->bitcnt -= need;
 
     /* return need bits, zeroing the bits above that */
     return val & ((1 << need) - 1);
 }
 
-
-
+/*
+ * Huffman code decoding tables.  count[1..MAXBITS] is the number of symbols of
+ * each length, which for a canonical code are stepped through in order.
+ * symbol[] are the symbol values in canonical order, where the number of
+ * entries is the sum of the counts in count[].  The decoding process can be
+ * seen in the function decode() below.
+ */
+struct huffman {
+    short *count;       /* number of symbols of each length */
+    short *symbol;      /* canonically ordered symbols */
+};
 
 /*
  * Decode a code from the stream s using huffman table h.  Return the symbol or
@@ -107,7 +120,7 @@ int Blast::bits(int need)
  *   this ordering, the bits pulled during decoding are inverted to apply the
  *   more "natural" ordering starting with all zeros and incrementing.
  */
-int Blast::decode(huffman& huff)
+local int decode(struct state *s, struct huffman *h)
 {
     int len;            /* current number of bits in code */
     int code;           /* len bits being decoded */
@@ -118,20 +131,20 @@ int Blast::decode(huffman& huff)
     int left;           /* bits left in next or left to process */
     short *next;        /* next number of codes */
 
-    bitbuf = m_bitbuf;
-    left = m_bitcnt;
+    bitbuf = s->bitbuf;
+    left = s->bitcnt;
     code = first = index = 0;
     len = 1;
-    next = huff.count + 1;
+    next = h->count + 1;
     while (1) {
         while (left--) {
             code |= (bitbuf & 1) ^ 1;   /* invert code */
             bitbuf >>= 1;
             count = *next++;
             if (code < first + count) { /* if length len, return symbol */
-                m_bitbuf = bitbuf;
-                m_bitcnt = (m_bitcnt - len) & 7;
-                return huff.symbol[index + (code - first)];
+                s->bitbuf = bitbuf;
+                s->bitcnt = (s->bitcnt - len) & 7;
+                return h->symbol[index + (code - first)];
             }
             index += count;             /* else update for next length */
             first += count;
@@ -141,12 +154,12 @@ int Blast::decode(huffman& huff)
         }
         left = (MAXBITS+1) - len;
         if (left == 0) break;
-        if (m_left == 0) {
-            m_left = m_infun(m_inhow, &(m_in), m_total);
-            if (m_left == 0) longjmp(m_env, 1);       /* out of input */
+        if (s->left == 0) {
+            s->left = s->infun(s->inhow, &(s->in));
+            if (s->left == 0) longjmp(s->env, 1);       /* out of input */
         }
-        bitbuf = *(m_in)++;
-        m_left--;
+        bitbuf = *(s->in)++;
+        s->left--;
         if (left > 8) left = 8;
     }
     return -9;                          /* ran out of codes */
@@ -169,10 +182,10 @@ int Blast::decode(huffman& huff)
  * it is possible for decode() using that table to return an error for received
  * codes past the end of the incomplete lengths.
  */
-int Blast::construct(huffman& huff, const unsigned char *rep, int n)
+local int construct(struct huffman *h, const unsigned char *rep, int n)
 {
     int symbol;         /* current symbol when stepping through length[] */
-    int len;            /* current length when stepping through huff.count[] */
+    int len;            /* current length when stepping through h->count[] */
     int left;           /* number of possible codes left of current length */
     short offs[MAXBITS+1];      /* offsets in symbol table for each length */
     short length[256];  /* code lengths */
@@ -191,24 +204,24 @@ int Blast::construct(huffman& huff, const unsigned char *rep, int n)
 
     /* count number of codes of each length */
     for (len = 0; len <= MAXBITS; len++)
-        huff.count[len] = 0;
+        h->count[len] = 0;
     for (symbol = 0; symbol < n; symbol++)
-        (huff.count[length[symbol]])++;   /* assumes lengths are within bounds */
-    if (huff.count[0] == n)               /* no codes! */
+        (h->count[length[symbol]])++;   /* assumes lengths are within bounds */
+    if (h->count[0] == n)               /* no codes! */
         return 0;                       /* complete, but decode() will fail */
 
     /* check for an over-subscribed or incomplete set of lengths */
     left = 1;                           /* one possible code of zero length */
     for (len = 1; len <= MAXBITS; len++) {
         left <<= 1;                     /* one more bit, double codes left */
-        left -= huff.count[len];          /* deduct count from possible codes */
+        left -= h->count[len];          /* deduct count from possible codes */
         if (left < 0) return left;      /* over-subscribed--return negative */
     }                                   /* left > 0 means incomplete */
 
     /* generate offsets into symbol table for each length for sorting */
     offs[1] = 0;
     for (len = 1; len < MAXBITS; len++)
-        offs[len + 1] = offs[len] + huff.count[len];
+        offs[len + 1] = offs[len] + h->count[len];
 
     /*
      * put symbols in table sorted by length, by symbol order within each
@@ -216,7 +229,7 @@ int Blast::construct(huffman& huff, const unsigned char *rep, int n)
      */
     for (symbol = 0; symbol < n; symbol++)
         if (length[symbol] != 0)
-            huff.symbol[offs[length[symbol]]++] = symbol;
+            h->symbol[offs[length[symbol]]++] = symbol;
 
     /* return zero for complete set, positive for incomplete set */
     return left;
@@ -260,7 +273,7 @@ int Blast::construct(huffman& huff, const unsigned char *rep, int n)
  *   ignoring whether the length is greater than the distance or not implements
  *   this correctly.
  */
-int Blast::decomp()
+local int decomp(struct state *s)
 {
     int lit;            /* true if literals are coded */
     int dict;           /* log2(dictionary size) - 6 */
@@ -273,9 +286,9 @@ int Blast::decomp()
     static short litcnt[MAXBITS+1], litsym[256];        /* litcode memory */
     static short lencnt[MAXBITS+1], lensym[16];         /* lencode memory */
     static short distcnt[MAXBITS+1], distsym[64];       /* distcode memory */
-    huffman litcode = {litcnt, litsym};   /* length code */
-    huffman lencode = {lencnt, lensym};   /* length code */
-    huffman distcode = {distcnt, distsym};/* distance code */
+    static struct huffman litcode = {litcnt, litsym};   /* length code */
+    static struct huffman lencode = {lencnt, lensym};   /* length code */
+    static struct huffman distcode = {distcnt, distsym};/* distance code */
         /* bit lengths of literal codes */
     static const unsigned char litlen[] = {
         11, 124, 8, 7, 28, 7, 188, 13, 76, 4, 10, 8, 12, 10, 12, 10, 8, 23, 8,
@@ -320,40 +333,40 @@ int Blast::decomp()
             dist = decode(s, &distcode) << symbol;
             dist += bits(s, symbol);
             dist++;
-            if (m_first && dist > m_next)
+            if (s->first && dist > s->next)
                 return -3;              /* distance too far back */
 
             /* copy length bytes from distance bytes back */
             do {
-                to = m_out + m_next;
+                to = s->out + s->next;
                 from = to - dist;
                 copy = MAXWIN;
-                if (m_next < dist) {
+                if (s->next < dist) {
                     from += copy;
                     copy = dist;
                 }
-                copy -= m_next;
+                copy -= s->next;
                 if (copy > len) copy = len;
                 len -= copy;
-                m_next += copy;
+                s->next += copy;
                 do {
                     *to++ = *from++;
                 } while (--copy);
-                if (m_next == MAXWIN) {
-                    if (m_outfun(m_outhow, m_out, m_next)) return 1;
-                    m_next = 0;
-                    m_first = 0;
+                if (s->next == MAXWIN) {
+                    if (s->outfun(s->outhow, s->out, s->next)) return 1;
+                    s->next = 0;
+                    s->first = 0;
                 }
             } while (len != 0);
         }
         else {
             /* get literal and write it */
             symbol = lit ? decode(s, &litcode) : bits(s, 8);
-            m_out[m_next++] = symbol;
-            if (m_next == MAXWIN) {
-                if (m_outfun(m_outhow, m_out, m_next)) return 1;
-                m_next = 0;
-                m_first = 0;
+            s->out[s->next++] = symbol;
+            if (s->next == MAXWIN) {
+                if (s->outfun(s->outhow, s->out, s->next)) return 1;
+                s->next = 0;
+                s->first = 0;
             }
         }
     } while (1);
@@ -361,36 +374,34 @@ int Blast::decomp()
 }
 
 /* See comments in blast.h */
-Blast::Blast()
+int blast(blast_in infun, void *inhow, blast_out outfun, void *outhow)
 {
-    init();
-}
+    struct state s;             /* input/output state */
+    int err;                    /* return value */
 
-void Blast::init(){
     /* initialize input state */
-    //m_infun = infun;
-    //m_inhow = inhow;
-    m_left = 0;
-    //m_total = len;
-    m_bitbuf = 0;
-    m_bitcnt = 0;
+    s.infun = infun;
+    s.inhow = inhow;
+    s.left = 0;
+    s.bitbuf = 0;
+    s.bitcnt = 0;
 
     /* initialize output state */
-    //m_outfun = outfun;
-    //m_outhow = outhow;
-    m_next = 0;
-    m_first = 1;
+    s.outfun = outfun;
+    s.outhow = outhow;
+    s.next = 0;
+    s.first = 1;
 
     /* return if bits() or decode() tries to read past available input */
-    if (setjmp(m_env) != 0)             /* if came back here via longjmp(), */
-        m_err = 2;                        /*  then skip decomp(), return error */
+    if (setjmp(s.env) != 0)             /* if came back here via longjmp(), */
+        err = 2;                        /*  then skip decomp(), return error */
     else
-        m_err = decomp();               /* decompress */
+        err = decomp(&s);               /* decompress */
 
     /* write any leftover output and update the error code if needed */
-    /*if (err != 1 && m_next && m_outfun(m_outhow, m_out, m_next) && err == 0)
+    if (err != 1 && s.next && s.outfun(s.outhow, s.out, s.next) && err == 0)
         err = 1;
-    return err;*/
+    return err;
 }
 
 #ifdef TEST

@@ -9,11 +9,18 @@
 #define	ISEXTRACT_H
 
 #include "blast.h"
-#include <stdint.h>
 #include <string>
 #include <vector>
 #include <fstream>
 #include <map>
+
+#ifdef _WIN32
+#define DIR_SEPARATOR '\\'
+#include "win32/stdint.h"
+#else
+#define DIR_SEPARATOR '/'
+#include <stdint.h>
+#endif
 
 class InstallShield
 {
@@ -36,7 +43,6 @@ private:
     
     uint32_t parseDirs();
     void parseFiles();
-    Blast m_decomp;
     t_file_map m_files;
     std::vector<std::string> m_filenames;
     std::string m_filename;

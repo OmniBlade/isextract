@@ -22,7 +22,7 @@ int main(int argc, char** argv)
     mode = argv[1];
     filepath = argv[2];
     
-    if(argc > 4) {
+    if(argc >= 4) {
         outdir = argv[3];
     }
     

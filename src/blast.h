@@ -21,12 +21,6 @@
   Mark Adler    madler@alumni.caltech.edu
  */
 
-#include <fstream>
-#include <stdint.h>
-#include <csetjmp>            /* for setjmp(), longjmp(), and jmp_buf */
-
-#define MAXBITS 13              /* maximum code length */
-#define MAXWIN 4096             /* maximum window size */
 
 /*
  * blast() decompresses the PKWare Data Compression Library (DCL) compressed
@@ -36,14 +30,15 @@
  * incompatible with the implode compression method supported by PKZIP.)
  */
 
-typedef unsigned (*blast_in)(void *how, unsigned char **buf, int len);
+
+typedef unsigned (*blast_in)(void *how, unsigned char **buf);
 typedef int (*blast_out)(void *how, unsigned char *buf, unsigned len);
 /* Definitions for input/output functions passed to blast().  See below for
  * what the provided functions need to do.
  */
 
 
-int blast(blast_in infun, void *inhow, blast_out outfun, void *outhow, int len);
+int blast(blast_in infun, void *inhow, blast_out outfun, void *outhow);
 /* Decompress input to output using the provided infun() and outfun() calls.
  * On success, the return value of blast() is zero.  If there is an error in
  * the source data, i.e. it is not in the proper format, then a negative value
@@ -74,43 +69,3 @@ int blast(blast_in infun, void *inhow, blast_out outfun, void *outhow, int len);
  * At the bottom of blast.c is an example program that uses blast() that can be
  * compiled to produce a command-line decompression filter by defining TEST.
  */
-
-class Blast
-{
-public:
-    Blast();
-    ~Blast();
-    void explode(std::fstream& ifh, std::fstream& ofh, uint32_t size);
-private:
-    /*
-     * Huffman code decoding tables.  count[1..MAXBITS] is the number of symbols of
-     * each length, which for a canonical code are stepped through in order.
-     * symbol[] are the symbol values in canonical order, where the number of
-     * entries is the sum of the counts in count[].  The decoding process can be
-     * seen in the function decode() below.
-     */
-    struct huffman {
-    short *count;       /* number of symbols of each length */
-    short *symbol;      /* canonically ordered symbols */
-    };
-    
-    int bits(int need);
-    int decode(huffman& huff);
-    void init();
-    int construct(huffman& huff, const unsigned char *rep, int n);
-    int decomp();
-    
-    //huffman m_h;
-    unsigned char *m_in;          /* next input location */
-    unsigned m_left;              /* available input at in */
-    int m_total;                  /* how much to read */
-    int m_bitbuf;                 /* bit buffer */
-    int m_bitcnt;                 /* number of bits in bit buffer */
-    /* input limit error return state for bits() and decode() */
-    jmp_buf m_env;
-    /* output state */
-    unsigned m_next;              /* index of next write location in out[] */
-    int m_first;                  /* true to check distances (for first 4K) */
-    unsigned char m_out[MAXWIN];  /* output buffer and sliding window */
-    int m_err;
-};
