@@ -135,6 +135,7 @@ void InstallShield::parseFiles()
 
 bool InstallShield::extractFile(const std::string& filename, const std::string& dir)
 {
+    //C style IO here because its easier to make work with Blast
     t_file_entry file;
     FILE* ifh;
     FILE* ofh;
@@ -152,15 +153,7 @@ bool InstallShield::extractFile(const std::string& filename, const std::string& 
     
     if(!ifh || !ofh) return false;
     
-    //seek to the file position we want to extract
-    //m_fh.seekg(m_current_file->second.offset + m_dataoffset, std::ios_base::beg);
-    
     fseek(ifh, m_current_file->second.offset + m_dataoffset, SEEK_SET);
-    
-    //open an output file stream
-    //ofh.open((dir + DIR_SEPARATOR + filename).c_str(), std::fstream::out|std::fstream::binary);
-    
-    //todo Blast decompress
     
     blast(inf, ifh, outf, ofh);
     
@@ -192,7 +185,6 @@ void InstallShield::listFiles()
     std::cout << "Archive contains the following files: \n";
     
     while(it != m_files.end()) {
-        //try to get a filename, if lmd doesn't have it try gmd.
         fname = it->first;
         
         std::cout << fname << "\n";
