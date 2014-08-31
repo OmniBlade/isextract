@@ -1,6 +1,39 @@
 #include "isextract.h"
+#include <iostream>
+
+void printUse()
+{
+    std::cout << "Useage is \"isextract [mode] [file] (dir)\"\n"
+              << "mode options are \'x\' for extract and \'l\' for list.\n";
+}
 
 int main(int argc, char** argv)
 {
+    std::string mode;
+    std::string filepath;
+    std::string outdir = "./";
     
+    if(argc < 3) {
+        printUse();
+        return 0;
+    }
+    
+    mode = argv[1];
+    filepath = argv[2];
+    
+    if(argc > 4) {
+        outdir = argv[3];
+    }
+    
+    InstallShield infile(filepath);
+    
+    if(mode == "x"){
+        infile.extractAll(outdir);
+    } else if(mode == "l") {
+        infile.listFiles();
+    } else {
+        printUse();
+    }
+    
+    return 0;
 }

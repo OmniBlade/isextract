@@ -6,6 +6,11 @@
 const uint32_t signature = 0x8C655D13;
 const int32_t data_start = 255;
 
+InstallShield::~InstallShield()
+{
+    
+}
+
 InstallShield::InstallShield(std::string& filename):
 m_filename(filename),
 m_dataoffset(255),
@@ -14,6 +19,8 @@ m_datasize(0)
     uint32_t sig;
     int32_t toc_address;
     uint16_t dir_count;
+    std::streampos pretoc;
+    
     
     /*reader.ReadBytes(8);
     var FileCount = reader.ReadUInt16();
@@ -31,10 +38,14 @@ m_datasize(0)
     if(sig != signature)
         throw "Not an Installshield package";
     
+    //get some basic info on where stuff is in file
     m_fh.seekg(37, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&toc_address), sizeof(int32_t));
     m_fh.seekg(4, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&dir_count), sizeof(uint16_t));
+    
+    //save the position before we go off finding the toc
+    pretoc = m_fh.tellg();
     
     /* Parse the directory list
     s.Seek(TOCAddress, SeekOrigin.Begin);
@@ -45,6 +56,7 @@ m_datasize(0)
     for (var i = 0; i < DirCount; i++)
             fileCountInDirs.Add(ParseDirectory(TOCreader)); */
     
+    //find the toc and work out how many files we have in the archive
     m_fh.seekg(toc_address, std::ios_base::beg);
     
     std::vector<uint32_t> dir_files;
@@ -58,7 +70,7 @@ m_datasize(0)
             for (var i = 0; i < fileCount; i++)
                     ParseFile(reader);*/
     for(uint32_t i = 0; i < dir_files.size(); i++){
-        for(uint32_t j = 0; j < i; j++) {
+        for(uint32_t j = 0; j < dir_files[i]; j++) {
             parseFiles();
         }
     }
@@ -79,6 +91,9 @@ uint32_t InstallShield::parseDirs()
     m_fh.read(reinterpret_cast<char*>(&fcount), sizeof(uint16_t));
     m_fh.read(reinterpret_cast<char*>(&chksize), sizeof(uint16_t));
     m_fh.read(reinterpret_cast<char*>(&nlen), sizeof(uint16_t));
+    
+    std::cout << "We have " << fcount << " files and a dir name " << nlen
+              << " chars long\n";
     
     //skip the name of the dir, we just want the files
     m_fh.seekg(nlen, std::ios_base::cur);
@@ -117,8 +132,10 @@ void InstallShield::parseFiles()
     m_fh.seekg(4, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&namelen), sizeof(uint8_t));
     
-    uint8_t buffer[namelen];
+    //read in file name, ensure null termination;
+    uint8_t buffer[namelen + 1];
     m_fh.read(reinterpret_cast<char*>(buffer), namelen);
+    buffer[namelen] = '\0';
     file.first = reinterpret_cast<char*>(buffer);
     //m_filenames.push_back(file.first);
     file.second.offset = m_datasize;
