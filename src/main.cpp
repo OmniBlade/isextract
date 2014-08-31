@@ -12,6 +12,7 @@ int main(int argc, char** argv)
     std::string mode;
     std::string filepath;
     std::string outdir = "./";
+    InstallShield infile;
     
     if(argc < 3) {
         printUse();
@@ -25,7 +26,12 @@ int main(int argc, char** argv)
         outdir = argv[3];
     }
     
-    InstallShield infile(filepath);
+    try {
+        infile.open(filepath);
+    } catch (const char* msg) {
+        std::cout << "Error: " << msg << "\n";
+        return -1;
+    }
     
     if(mode == "x"){
         infile.extractAll(outdir);

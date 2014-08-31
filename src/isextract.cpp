@@ -1,60 +1,54 @@
 #include "isextract.h"
-#include "blast.h"
 
 #include <iostream>
 
+#ifdef _WIN32
+#define DIR_SEPARATOR '\\'
+#else
+#define DIR_SEPARATOR '/'
+#endif
+
 const uint32_t signature = 0x8C655D13;
 const int32_t data_start = 255;
+const uint32_t chunk = 16384;
 
 InstallShield::~InstallShield()
 {
     
 }
 
-InstallShield::InstallShield(std::string& filename):
-m_filename(filename),
-m_dataoffset(255),
-m_datasize(0)
+InstallShield::InstallShield():
+m_dataoffset(data_start),
+m_datasize(0),
+m_decomp()
+{
+    
+}
+
+void InstallShield::open(std::string& filename)
 {
     uint32_t sig;
     int32_t toc_address;
     uint16_t dir_count;
     std::streampos pretoc;
-    
-    
-    /*reader.ReadBytes(8);
-    var FileCount = reader.ReadUInt16();
-    reader.ReadBytes(4);
-    var ArchiveSize = reader.ReadUInt32();
-    reader.ReadBytes(19);
-    var TOCAddress = reader.ReadInt32();
-    reader.ReadBytes(4);
-    var DirCount = reader.ReadUInt16();*/
+    m_filename = std::string(filename);
     
     m_fh.open(filename.c_str(), std::ios::binary|std::ios::in);
+    
+    if(!m_fh.is_open())
+        throw "Could not open file.";
+    
     m_fh.read(reinterpret_cast<char*>(&sig), sizeof(uint32_t));
     
     //test if we have what we think we have
     if(sig != signature)
-        throw "Not an Installshield package";
+        throw "Not a valid InstallShield 3 archive.";
     
     //get some basic info on where stuff is in file
     m_fh.seekg(37, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&toc_address), sizeof(int32_t));
     m_fh.seekg(4, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&dir_count), sizeof(uint16_t));
-    
-    //save the position before we go off finding the toc
-    pretoc = m_fh.tellg();
-    
-    /* Parse the directory list
-    s.Seek(TOCAddress, SeekOrigin.Begin);
-    var TOCreader = new BinaryReader(s);
-
-    var fileCountInDirs = new List<uint>();
-    // Parse directories
-    for (var i = 0; i < DirCount; i++)
-            fileCountInDirs.Add(ParseDirectory(TOCreader)); */
     
     //find the toc and work out how many files we have in the archive
     m_fh.seekg(toc_address, std::ios_base::beg);
@@ -65,15 +59,18 @@ m_datasize(0)
         dir_files.push_back(parseDirs());
     }
 
-    /* Parse files
-    foreach (var fileCount in fileCountInDirs)
-            for (var i = 0; i < fileCount; i++)
-                    ParseFile(reader);*/
+    //parse the file entries in the toc to get filenames, size and location
     for(uint32_t i = 0; i < dir_files.size(); i++){
         for(uint32_t j = 0; j < dir_files[i]; j++) {
             parseFiles();
         }
     }
+}
+
+void InstallShield::close()
+{
+    m_filename = "";
+    m_fh.close();
 }
 
 uint32_t InstallShield::parseDirs()
@@ -82,18 +79,11 @@ uint32_t InstallShield::parseDirs()
     uint16_t chksize;
     uint16_t nlen;
     
-    /* Parse directory header
-        var FileCount = reader.ReadUInt16();
-        var ChunkSize = reader.ReadUInt16();
-        var NameLength = reader.ReadUInt16();
-        reader.ReadChars(NameLength); //var DirName = new String(reader.ReadChars(NameLength));*/
-    
     m_fh.read(reinterpret_cast<char*>(&fcount), sizeof(uint16_t));
     m_fh.read(reinterpret_cast<char*>(&chksize), sizeof(uint16_t));
     m_fh.read(reinterpret_cast<char*>(&nlen), sizeof(uint16_t));
     
-    std::cout << "We have " << fcount << " files and a dir name " << nlen
-              << " chars long\n";
+    std::cout << "We have " << fcount << " files\n";
     
     //skip the name of the dir, we just want the files
     m_fh.seekg(nlen, std::ios_base::cur);
@@ -107,20 +97,6 @@ uint32_t InstallShield::parseDirs()
 //uint AccumulatedData = 0;
 void InstallShield::parseFiles()
 {
-    
-    /*reader.ReadBytes(7);
-    var CompressedSize = reader.ReadUInt32();
-    reader.ReadBytes(12);
-    var ChunkSize = reader.ReadUInt16();
-    reader.ReadBytes(4);
-    var NameLength = reader.ReadByte();
-    var FileName = new String(reader.ReadChars(NameLength));
-    filenames.Add(FileName);
-    AccumulatedData += CompressedSize;
-
-    // Skip to the end of the chunk
-    reader.ReadBytes(ChunkSize - NameLength - 30); */
-    
     t_file_entry file;
     uint16_t chksize;
     uint8_t namelen;
@@ -137,43 +113,61 @@ void InstallShield::parseFiles()
     m_fh.read(reinterpret_cast<char*>(buffer), namelen);
     buffer[namelen] = '\0';
     file.first = reinterpret_cast<char*>(buffer);
-    //m_filenames.push_back(file.first);
+    
+    //complete out file entry with the offset within the body.
     file.second.offset = m_datasize;
     
     m_files.insert(file);
     
+    //increase body size to next offset for next file
     m_datasize += file.second.compressed_size;
     
     //skip to end of chunk
     m_fh.seekg(chksize - namelen - 30, std::ios_base::cur);
 }
 
-bool InstallShield::extractFile(const std::string& filename)
+bool InstallShield::extractFile(const std::string& filename, const std::string& dir)
 {
     t_file_entry file;
     std::fstream ofh;
     
-    t_file_iter info = m_files.find(filename);
+    m_current_file = m_files.find(filename);
     
-    if(info != m_files.end()) {
-        file = *info;
+    if(m_current_file != m_files.end()) {
+        file = *m_current_file;
     } else {
         return false;
     }
-
-    ofh.open(filename.c_str(), std::fstream::out|std::fstream::binary);
     
+    //seek to the file position we want to extract
+    m_fh.seekg(m_current_file->second.offset + m_dataoffset, std::ios_base::beg);
+    
+    //open an output file stream
+    ofh.open((dir + DIR_SEPARATOR + filename).c_str(), std::fstream::out|std::fstream::binary);
+    
+    if(m_current_file->second.compressed_size > chunk) {
+        m_file_remaining = m_current_file->second.compressed_size;
+    }
     //todo Blast decompress
     
+    blast(inf, &m_fh, outf, &ofh, m_file_remaining);
+    
+    ofh.close();
     return true;
 }
 
 bool InstallShield::extractAll(const std::string& dir)
 {
-    std::fstream ofh;
-    t_file_iter info;
+    t_file_iter it = m_files.begin();
+    bool rv = true;
     
-    return true;
+    while(it != m_files.end()) {
+        if(!extractFile(it->first, dir)) rv = false;
+        
+        it++;
+    }
+    
+    return rv;
 }
 
 void InstallShield::listFiles()
