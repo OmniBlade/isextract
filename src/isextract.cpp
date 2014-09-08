@@ -5,6 +5,12 @@
 const uint32_t signature = 0x8C655D13;
 const int32_t data_start = 255;
 const uint32_t CHUNK = 16384;
+const uint32_t YR_MASK  = 0xFE000000;
+const uint32_t MON_MASK = 0x01E00000;
+const uint32_t DAY_MASK = 0x001F0000;
+const uint32_t HR_MASK  = 0x0000F800;
+const uint32_t MIN_MASK = 0x000007E0;
+const uint32_t SEC_MASK = 0x0000001F;
 
 unsigned inf(void *how, unsigned char **buf)
 {
@@ -111,7 +117,9 @@ void InstallShield::parseFiles()
     m_fh.seekg(3, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&file.second.uncompressed_size), sizeof(uint32_t));
     m_fh.read(reinterpret_cast<char*>(&file.second.compressed_size), sizeof(uint32_t));
-    m_fh.seekg(12, std::ios_base::cur);
+    m_fh.seekg(4, std::ios_base::cur);
+    m_fh.read(reinterpret_cast<char*>(&file.second.datetime), sizeof(uint32_t));
+    m_fh.seekg(4, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&chksize), sizeof(uint16_t));
     m_fh.seekg(4, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&namelen), sizeof(uint8_t));

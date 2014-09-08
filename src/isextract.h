@@ -37,6 +37,7 @@ private:
         uint32_t compressed_size;
         uint32_t uncompressed_size;
         uint32_t offset;
+        uint32_t datetime;
     };
     typedef std::map<std::string, t_entry> t_file_map;
     typedef std::pair<std::string, t_entry> t_file_entry;
