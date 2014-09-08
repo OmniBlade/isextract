@@ -35,6 +35,7 @@ public:
 private:
     struct t_entry {
         uint32_t compressed_size;
+        uint32_t uncompressed_size;
         uint32_t offset;
     };
     typedef std::map<std::string, t_entry> t_file_map;

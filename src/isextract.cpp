@@ -108,7 +108,8 @@ void InstallShield::parseFiles()
     uint16_t chksize;
     uint8_t namelen;
     
-    m_fh.seekg(7, std::ios_base::cur);
+    m_fh.seekg(3, std::ios_base::cur);
+    m_fh.read(reinterpret_cast<char*>(&file.second.uncompressed_size), sizeof(uint32_t));
     m_fh.read(reinterpret_cast<char*>(&file.second.compressed_size), sizeof(uint32_t));
     m_fh.seekg(12, std::ios_base::cur);
     m_fh.read(reinterpret_cast<char*>(&chksize), sizeof(uint16_t));
@@ -181,13 +182,17 @@ void InstallShield::listFiles()
 {
     t_file_iter it = m_files.begin();
     std::string fname;
+    uint32_t size;
+    uint32_t csize;
     
     std::cout << "Archive contains the following files: \n";
     
     while(it != m_files.end()) {
         fname = it->first;
+        size = it->second.uncompressed_size;
+        csize = it->second.compressed_size;
         
-        std::cout << fname << "\n";
+        std::cout << fname << " " << csize << " " << size << "\n";
         
         it++;
     }
