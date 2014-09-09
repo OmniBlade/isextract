@@ -1,6 +1,7 @@
 #include "isextract.h"
 #include "dostime.h"
 
+#include <utime.h>
 #include <iostream>
 #include <ctime>
 
@@ -151,6 +152,7 @@ bool InstallShield::extractFile(const std::string& filename, const std::string& 
     t_file_entry file;
     FILE* ifh;
     FILE* ofh;
+    struct utimbuf tstamp;
     
     m_current_file = m_files.find(filename);
     
@@ -171,6 +173,10 @@ bool InstallShield::extractFile(const std::string& filename, const std::string& 
     
     fclose(ifh);
     fclose(ofh);
+    
+    tstamp.actime = dos2unixtime(m_current_file->second.datetime);
+    tstamp.modtime = tstamp.actime;
+    utime((dir + DIR_SEPARATOR + filename).c_str(), &tstamp);
     
     return true;
 }
