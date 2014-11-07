@@ -3,5 +3,5 @@ This program is free software; you can redistribute it and/or modify it under th
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the <a href="http://www.gnu.org/licenses/gpl.html">GNU General Public License</a> for more details.
 
 You should have received a copy of the <a href="http://www.gnu.org/licenses/gpl.html">GNU General Public License</a> along with this program; if not, write to the Free Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- 
-This program uses the SimpleOpt library licensed under the standard MIT license from http://www.opensource.org/licenses/mit-license.php Copyright (c) 2006-2013, Brodie Thiesfield
+
+This software utilizes a pkware explode implementation written by Mark Adler, please see blast.h for licensing details.

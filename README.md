@@ -22,6 +22,7 @@ dir specifies an optional directory that the files should be extracted to.
 Acknowledgements
 ================
 
+Bryan Burns for the GPL implementation of a a dos time format convertor.
 Mark Adler for the open source implementation of the PKWare "explode" algorithm.
 OpenRA for the C# implementation on which this implementation is based.
 Veit Kannegieser for STIX on which the OpenRA implementation is based.
