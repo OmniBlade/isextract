@@ -10,7 +10,6 @@ TEST_SRC=$(wildcard tests/*_tests.cpp)
 TESTS=$(patsubst %.cpp,%,$(TEST_SRC))
 
 TARGET=build/isextract
-SO_TARGET=$(patsubst %.a,%.so,$(TARGET))
 
 # The Target Build
 all: $(TARGET)
