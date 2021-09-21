@@ -9,10 +9,10 @@ OBJECTS=$(patsubst %.cpp,%.o,$(SOURCES))
 TEST_SRC=$(wildcard tests/*_tests.cpp)
 TESTS=$(patsubst %.cpp,%,$(TEST_SRC))
 
-TARGET=build/isextract
+EXECUTABLE=build/isextract
 
 # The Target Build
-all: $(TARGET)
+all: $(EXECUTABLE)
 
 dev: CXXFLAGS=-g -Wall -Wexta $(OPTFLAGS)
 dev: all
@@ -22,8 +22,8 @@ win32:
 	CXX=i586-mingw32msvc-g++
 
 	
-$(TARGET): build $(OBJECTS)
-	$(CC) $(OBJECTS) -o $(TARGET)
+$(EXECUTABLE): build $(OBJECTS)
+	$(CC) $(OBJECTS) -o $(EXECUTABLE)
 
 build:
 	@mkdir -p build
@@ -39,7 +39,7 @@ clean:
 # The Install
 install: all
 	install -d $(DESTDIR)/$(PREFIX)/lib/
-	install $(TARGET) $(DESTDIR)/$(PREFIX)/lib/
+	install $(EXECUTABLE) $(DESTDIR)/$(PREFIX)/lib/
 
 # The Checker
 BADFUNCS='[^_.>a-zA-Z0-9](str(n?cpy|n?cat|xfrm|n?dup|str|pbrk|tok|_)|stpn?cpy|a?sn?printf|byte_)'
