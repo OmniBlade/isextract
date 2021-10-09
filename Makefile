@@ -9,7 +9,7 @@ OBJECTS=$(patsubst %.cpp,%.o,$(SOURCES))
 TEST_SRC=$(wildcard tests/*_tests.cpp)
 TESTS=$(patsubst %.cpp,%,$(TEST_SRC))
 
-TARGET=build/isextract
+TARGET=bin/isextract
 SO_TARGET=$(patsubst %.a,%.so,$(TARGET))
 
 # The Target Build
@@ -27,7 +27,6 @@ $(TARGET): build $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET)
 
 build:
-	@mkdir -p build
 	@mkdir -p bin
 
 # The Cleaner
@@ -39,8 +38,8 @@ clean:
 
 # The Install
 install: all
-	install -d $(DESTDIR)/$(PREFIX)/lib/
-	install $(TARGET) $(DESTDIR)/$(PREFIX)/lib/
+	install -d $(DESTDIR)/$(PREFIX)/bin/
+	install $(TARGET) $(DESTDIR)/$(PREFIX)/bin/
 
 # The Checker
 BADFUNCS='[^_.>a-zA-Z0-9](str(n?cpy|n?cat|xfrm|n?dup|str|pbrk|tok|_)|stpn?cpy|a?sn?printf|byte_)'
